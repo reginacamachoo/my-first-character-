@@ -1,40 +1,113 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
   <meta charset="utf-8">
-  <title>Model Viewer AR - VR</title>
-  <meta name="description" content="Model Viewer (VR / AR) • A-Frame">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ghost Fly — Realidad Virtual</title>
+  <!-- Lo unico que se carga de internet es A-Frame. Ya no dependemos de
+       model-viewer.js, ar-shadows.js ni los demas archivos locales. -->
   <script src="https://aframe.io/releases/1.8.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@gh-pages/examples/js/info-message.js"></script>
-  <script src="animation-mixer.js"></script>
-  <script src="ar-shadows.js"></script>
-  <script src="model-viewer.js"></script>
-  <script src="background-gradient.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@gh-pages/examples/js/remix-dropdown.js"></script>
+
+  <script>
+    // ==================================================================
+    // COMPONENTE: personaje-glb
+    // Hace dos cosas con el modelo que le pongamos:
+    //   1) Esconde las mallas cuyo nombre empieza con la palabra que le
+    //      digamos. Lo necesitamos porque este modelo trae un plano de
+    //      fondo llamado "Plane__0" que mide 47 metros y tapa la escena.
+    //   2) Reproduce la animacion que el modelo trae adentro. Este
+    //      fantasma tiene una que se llama "Fly floating" y dura 4.25 seg.
+    // ==================================================================
+    AFRAME.registerComponent('personaje-glb', {
+      schema: { ocultar: { type: 'string', default: 'Plane' } },
+
+      init: function () {
+        this.mixer = null;
+
+        // "model-loaded" es el aviso de que el archivo .glb ya termino de bajar
+        this.el.addEventListener('model-loaded', (evento) => {
+          const modelo = evento.detail.model;
+          const aOcultar = this.data.ocultar;
+
+          // Recorremos todas las piezas del modelo y apagamos las que sobran
+          modelo.traverse((parte) => {
+            if (parte.isMesh && aOcultar && parte.name.indexOf(aOcultar) === 0) {
+              parte.visible = false;
+            }
+          });
+
+          // Si el modelo trae animaciones, prendemos la primera
+          if (modelo.animations && modelo.animations.length) {
+            this.mixer = new AFRAME.THREE.AnimationMixer(modelo);
+            this.mixer.clipAction(modelo.animations[0]).play();
+          }
+        });
+      },
+
+      // "tick" se ejecuta en cada cuadro del video (unas 60 veces por segundo).
+      // Aqui le decimos a la animacion cuanto tiempo paso para que avance.
+      tick: function (tiempo, deltaTiempo) {
+        if (this.mixer && deltaTiempo) this.mixer.update(deltaTiempo / 1000);
+      }
+    });
+  </script>
 </head>
 <body>
+  <!--
+    ESCENA CON EL PERSONAJE
+    Como probarla:
+      En computadora: arrastra el mouse para mirar, W A S D para moverte.
+      En los Quest 3: abre el link y toca el icono de gafas.
+  -->
+  <a-scene background="color: #101030">
 
-<a-scene
-  info-message="htmlSrc: #messageText"
-  model-viewer="gltfModel: #GhostFly; title: Ghost Fly"
-  xr-mode-ui="XRMode: xr">
-  <a-assets timeout="10000">
+    <a-assets timeout="20000">
+      <!--
+        Modelo: Ghost Fly rigged (Adventure Time)
+        Descargado de Sketchfab
+
+        IMPORTANTE: el "src" tiene que decir EXACTAMENTE como se llama tu
+        archivo en GitHub, con mayusculas y guiones bajos iguales.
+        response-type="arraybuffer" es obligatorio para archivos .glb.
+      -->
+      <a-asset-item id="GhostFly"
+                    src="ghost_fly_rigged__adventure_time.glb"
+                    response-type="arraybuffer"></a-asset-item>
+    </a-assets>
+
+    <!-- Luces: sin esto el modelo se ve negro -->
+    <a-entity light="type: ambient; color: #CCCCFF; intensity: 1.2"></a-entity>
+    <a-entity light="type: directional; intensity: 1.2" position="2 4 3"></a-entity>
+
+    <!-- Piso -->
+    <a-plane rotation="-90 0 0" width="60" height="60" color="#2A2A4A"></a-plane>
+
     <!--
-      Modelo: Ghost Fly rigged (Adventure Time)
-      Fuente: Sketchfab
-      Autor: (pon aqui el nombre del autor de Sketchfab)
-      Licencia: Sketchfab Standard
+      EL PERSONAJE
+        scale 400 ..... el modelo viene chiquitisimo, hay que agrandarlo.
+                        Sube o baja este numero para cambiarle el tamaño.
+        position ...... "x y z". La y es la altura, la z negativa lo aleja.
+        rotation ...... el segundo numero lo gira para que te vea de frente.
+        personaje-glb . activa el componente de arriba (esconde el plano
+                        de fondo y prende la animacion de flotar).
     -->
-    <!-- CORREGIDO 1: el id ya no lleva espacio, ahora si coincide con #GhostFly -->
-    <!-- CORREGIDO 2: el src apunta a MI archivo, no al triceratops de ejemplo -->
-    <a-asset-item id="GhostFly"
-      src="ghost_fly_rigged__adventure_time.glb"
-      response-type="arraybuffer"></a-asset-item>
+    <a-entity id="fantasma"
+              gltf-model="#GhostFly"
+              personaje-glb
+              position="0 1.2 -3"
+              scale="400 400 400"
+              rotation="0 0 0"></a-entity>
 
-    <img id="shadow" src="shadow.png">
-    <a-asset-item id="messageText" src="message.html"></a-asset-item>
-  </a-assets>
-</a-scene>
+    <!-- Cubo de 1 metro, solo para comparar tamaños. Borralo cuando quieras. -->
+    <a-box position="-1.8 0.5 -3" width="1" height="1" depth="1" color="#4CC3D9"></a-box>
+
+    <!-- Camara y controles -->
+    <a-entity camera look-controls wasd-controls position="0 1.6 0">
+      <a-cursor color="#FFFFFF"></a-cursor>
+    </a-entity>
+    <a-entity laser-controls="hand: left"></a-entity>
+    <a-entity laser-controls="hand: right"></a-entity>
+
+  </a-scene>
 </body>
 </html>
